@@ -1,3 +1,4 @@
+import { HttpModule } from '@nestjs/axios';
 import { Module, CacheModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -11,6 +12,7 @@ const redisStore = require('cache-manager-redis-store');
 
 @Module({
   imports: [
+    HttpModule,
     KafkaModule,
     CacheModule.register({
       store: redisStore,

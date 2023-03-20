@@ -13,19 +13,23 @@ import {
   PizzaProfile,
 } from './shared/model/pizzaProfile';
 import { Cache } from 'cache-manager';
+import { HttpService } from '@nestjs/axios';
+import { AppService } from './app.service';
+import { lastValueFrom } from 'rxjs';
 
 @Injectable()
 export class RedisConsumer implements OnModuleInit {
   constructor(
     private readonly consumerService: ConsumerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly http: HttpService,
+    private readonly app: AppService,
   ) {}
 
   Pizza_order: Partial<PizzaProfile> = {};
   kafka_msg_res_status: Partial<message_status_restuarant> = {};
   kafka_msg_order_status: Partial<message_status_order> = {};
   kafka_msg_Neworder: Partial<newOrder> = {};
-
 
   async ChangeRestuarantStatus(msg: message_status_restuarant) {
     const data = await this.cacheManager.get<PizzaProfile>(
@@ -50,32 +54,27 @@ export class RedisConsumer implements OnModuleInit {
     }
   }
   getMinutesPassedSinceDate(dateStr) {
-
     const date = new Date(Date.parse(dateStr));
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const minutesPassed = Math.round(diff / (1000 * 60));
     return minutesPassed;
-   }
+  }
 
-   async ChangeorderStatus(msg:message_status_order){
-  
-    let data = await this.cacheManager.get<PizzaProfile>(`${msg.pizzeria_id}`)
-    if(data){
-     
-      
-      for(const order of data.orders){
-     
-        if(Number.parseInt(order.id) == Number.parseInt(msg.order_id)){
-         // console.log("i have entered to the order in the specific restuarant", order.id)
-          const time_passed=this.getMinutesPassedSinceDate(order.statusTime)
-          
-          order.status=msg.status
-          order.time_to_order=time_passed.toString()
+  async ChangeorderStatus(msg: message_status_order) {
+    const data = await this.cacheManager.get<PizzaProfile>(
+      `${msg.pizzeria_id}`,
+    );
+    if (data) {
+      for (const order of data.orders) {
+        if (Number.parseInt(order.id) == Number.parseInt(msg.order_id)) {
+          const time_passed = this.getMinutesPassedSinceDate(order.statusTime);
+
+          order.status = msg.status;
+          order.time_to_order = time_passed.toString();
         }
       }
-      await this.cacheManager.set( `${msg.pizzeria_id}`, data,{ttl: 100000});
-      
+      await this.cacheManager.set(`${msg.pizzeria_id}`, data, { ttl: 100000 });
     }
   }
   async InsertData(msg: newOrder) {
@@ -115,7 +114,6 @@ export class RedisConsumer implements OnModuleInit {
       {
         eachMessage: async ({ topic, message }) => {
           if (topic == 'restaurant-status-change') {
-            console.log("closed a resturant")
             const temp = message.value.toString();
             const myObject = JSON.parse(temp);
             const myArray = Object.values(myObject);
@@ -127,15 +125,24 @@ export class RedisConsumer implements OnModuleInit {
               region: myArray[2].toString(),
               status: myBoolean,
             };
-
-            this.ChangeRestuarantStatus(this.kafka_msg_res_status);
-          }  if (topic == 'order-status-change') {
-            //console.log("order status change");
+            await this.ChangeRestuarantStatus(this.kafka_msg_res_status);
+            const head = await this.app.getDataForHeader();
+            const body = await this.app.getDataForBody();
+            this.http.post(
+              'http://localhost:3000/api/v1/dashboard/update-header-cards',
+              head,
+            );
+            this.http.post(
+              'http://localhost:3000/api/v1/dashboard/update-body-cards',
+              body,
+            );
+          }
+          if (topic == 'order-status-change') {
             const temp = message.value.toString();
             const myObject = JSON.parse(temp);
             const myArray = Object.values(myObject);
             const orderObj = Object.values(myArray[3]);
-           
+
             //const myBoolean:boolean =!!myArray[3]
 
             this.kafka_msg_order_status = {
@@ -143,11 +150,19 @@ export class RedisConsumer implements OnModuleInit {
               order_id: orderObj[0].toString(),
               status: orderObj[1],
             };
-            
-
-            this.ChangeorderStatus(this.kafka_msg_order_status);
-          }  if (topic == 'new-order') {
-            console.log("recived new orer")
+            await this.ChangeorderStatus(this.kafka_msg_order_status);
+            const head = await this.app.getDataForHeader();
+            const body = await this.app.getDataForBody();
+            this.http.post(
+              'http://localhost:3000/api/v1/dashboard/update-header-cards',
+              head,
+            );
+            this.http.post(
+              'http://localhost:3000/api/v1/dashboard/update-body-cards',
+              body,
+            );
+          }
+          if (topic == 'new-order') {
             const temp = message.value.toString();
             const myObject = JSON.parse(temp);
             const myArray = Object.values(myObject);
@@ -157,7 +172,21 @@ export class RedisConsumer implements OnModuleInit {
               region: myArray[2].toString(),
               order: myArray[3],
             };
-            this.InsertData(this.kafka_msg_Neworder);
+            await this.InsertData(this.kafka_msg_Neworder);
+            const head = await this.app.getDataForHeader();
+            const body = await this.app.getDataForBody();
+            await lastValueFrom(
+              this.http.post(
+                'http://localhost:3000/api/v1/dashboard/update-header-cards',
+                head,
+              ),
+            );
+            await lastValueFrom(
+              this.http.post(
+                'http://localhost:3000/api/v1/dashboard/update-body-cards',
+                body,
+              ),
+            );
           }
           // Handle message for 'restaurant-status-change' topic here
         },
