@@ -7,9 +7,9 @@ export interface PizzaProfile {
     
 }
 export interface ordersObj{
-    order_id?: string,
-    order_status?: string,
-    time?: string,
+    id?: string,
+    status?: string,
+    statusTime?: string,
     time_to_order?: string,
     toppings?:string []
 }

@@ -113,10 +113,10 @@ export class AppController {
 
       total_orders += value.orders.length;
       for (const order of value.orders) {
-        if (order.order_status == 'open') {
+        if (order.status == 'open') {
           open_orders++;
         }
-        if (order.order_status == 'closed') {
+        if (order.status == 'closed') {
           temp_operation_time += parseInt(order.time_to_order);
           count_closed_orders++;
         }
@@ -161,23 +161,31 @@ export class AppController {
     const orderAccordinglyToTime: { [key: string]: number } = {};
     const regionOrderCount: { [key: string]: number } = {};
     const cityData = {};
+    let region_temp_count=0;
     keys.forEach(async (key, index) => {
       const value = await this.cacheManager.get<PizzaProfile>(key);
-      regionOrderCount[value.region] = value.orders.length;
+      region_temp_count=value.orders.length;
+      if(regionOrderCount[value.region]==null){
+      regionOrderCount[value.region] =region_temp_count;
+      }
+      else{
+        regionOrderCount[value.region]+=region_temp_count;
+      }
+      console.log(value.region, " number of orders for region",regionOrderCount[value.region])
 
       if (value) {
         for (const order of value.orders) {
-          orderAccordinglyToTime[this.roundTimeToNearestHour(order.time)] =
-            (orderAccordinglyToTime[this.roundTimeToNearestHour(order.time)] ||
+          orderAccordinglyToTime[this.roundTimeToNearestHour(order.statusTime)] =
+            (orderAccordinglyToTime[this.roundTimeToNearestHour(order.statusTime)] ||
               0) + 1;
 
           if (value.name in cityData) {
-            if (order.order_status == 'closed') {
+            if (order.status == 'closed') {
               cityData[value.name].timeSum += parseInt(order.time_to_order);
               cityData[value.name].count++;
             }
           } else {
-            if (order.order_status == 'closed') {
+            if (order.status == 'closed') {
               // If it isn't, create a new city data object
               cityData[value.name] = {
                 timeSum: parseInt(order.time_to_order),
@@ -225,7 +233,7 @@ export class AppController {
           const finalcityAverages = cityAverages.slice(0, 5);
 
           const myArray = Object.entries(regionOrderCount);
-          myArray.sort((a, b) => a[1] - b[1]);
+          myArray.sort((a, b) => b[1] - a[1]);
           const namesArray = myArray.map((item) => item[0]);
           const numbersArray = myArray.map((item) => item[1]);
 

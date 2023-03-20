@@ -25,12 +25,14 @@ export class RedisConsumer implements OnModuleInit {
   kafka_msg_res_status: Partial<message_status_restuarant> = {};
   kafka_msg_order_status: Partial<message_status_order> = {};
   kafka_msg_Neworder: Partial<newOrder> = {};
+
+
   async ChangeRestuarantStatus(msg: message_status_restuarant) {
     const data = await this.cacheManager.get<PizzaProfile>(
       `${msg.pizzeria_id}`,
     );
     if (data) {
-      data.is_open = msg.status;
+      data.is_open = false;
       await this.cacheManager.set(`${msg.pizzeria_id}`, data, { ttl: 100000 });
     } else {
       this.Pizza_order = {
@@ -60,12 +62,15 @@ export class RedisConsumer implements OnModuleInit {
   
     let data = await this.cacheManager.get<PizzaProfile>(`${msg.pizzeria_id}`)
     if(data){
+     
+      
       for(const order of data.orders){
-        
-        if(order.order_id==msg.order_id){
-          const time_passed=this.getMinutesPassedSinceDate(order.time)
+     
+        if(Number.parseInt(order.id) == Number.parseInt(msg.order_id)){
+         // console.log("i have entered to the order in the specific restuarant", order.id)
+          const time_passed=this.getMinutesPassedSinceDate(order.statusTime)
           
-          order.order_status=msg.status
+          order.status=msg.status
           order.time_to_order=time_passed.toString()
         }
       }
@@ -110,6 +115,7 @@ export class RedisConsumer implements OnModuleInit {
       {
         eachMessage: async ({ topic, message }) => {
           if (topic == 'restaurant-status-change') {
+            console.log("closed a resturant")
             const temp = message.value.toString();
             const myObject = JSON.parse(temp);
             const myArray = Object.values(myObject);
@@ -123,20 +129,25 @@ export class RedisConsumer implements OnModuleInit {
             };
 
             this.ChangeRestuarantStatus(this.kafka_msg_res_status);
-          } else if (topic == 'order-status-change') {
+          }  if (topic == 'order-status-change') {
+            //console.log("order status change");
             const temp = message.value.toString();
             const myObject = JSON.parse(temp);
             const myArray = Object.values(myObject);
+            const orderObj = Object.values(myArray[3]);
+           
             //const myBoolean:boolean =!!myArray[3]
 
             this.kafka_msg_order_status = {
               pizzeria_id: myArray[0].toString(),
-              order_id: myArray[1].toString(),
-              status: myArray[2].toString(),
+              order_id: orderObj[0].toString(),
+              status: orderObj[1],
             };
+            
 
             this.ChangeorderStatus(this.kafka_msg_order_status);
-          } else if (topic == 'new-order') {
+          }  if (topic == 'new-order') {
+            console.log("recived new orer")
             const temp = message.value.toString();
             const myObject = JSON.parse(temp);
             const myArray = Object.values(myObject);
